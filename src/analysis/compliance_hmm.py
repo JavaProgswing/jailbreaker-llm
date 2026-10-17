@@ -3,7 +3,7 @@ from hmmlearn.hmm import GaussianHMM
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import accuracy_score, adjusted_rand_score, confusion_matrix
 
-from src.analysis.utils import COMPLIANCE_STATES, load_transcript_rows, save_metrics
+from src.analysis.utils import COMPLIANCE_STATES, load_transcript_rows, save_metrics, with_ground_truth
 
 SCORE_COLUMNS = [f'judge_{s}' for s in COMPLIANCE_STATES]
 
@@ -24,7 +24,7 @@ def match_states_to_truth(true_codes: np.ndarray, decoded_states: np.ndarray, n_
 
 
 def main():
-    df = load_transcript_rows()
+    df = with_ground_truth(load_transcript_rows())
     X, lengths, true_codes = build_sequences(df)
     print('\n=== HMM: decoding compliance state using judge scores + TURN ORDER ===')
     model = GaussianHMM(n_components=3, covariance_type='diag', n_iter=200, random_state=42)

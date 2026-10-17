@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from src.analysis.utils import COMPLIANCE_STATES, OUTPUTS_DIR, ensure_outputs_dir, load_transcript_rows, save_metrics
+from src.analysis.utils import COMPLIANCE_STATES, OUTPUTS_DIR, ensure_outputs_dir, load_transcript_rows, save_metrics, with_ground_truth
 
 SCORE_COLUMNS = [f'judge_{s}' for s in COMPLIANCE_STATES]
 
@@ -37,7 +37,7 @@ def plot_clusters(X_scaled, labels, true_state, name):
 
 
 def main():
-    df = load_transcript_rows()
+    df = with_ground_truth(load_transcript_rows())
     X_scaled = StandardScaler().fit_transform(df[SCORE_COLUMNS].values)
     true_state = df['true_compliance_state']
     print('\n=== clustering: unsupervised compliance-state discovery from judge scores alone ===')

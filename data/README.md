@@ -5,3 +5,8 @@ not contain real harmful procedures and are not a production evaluation set.
 `seed_prompts.txt` contains high-level authorized local safety probes. Replace
 or extend it with prompts that match your own model policy and evaluation
 scope before interpreting campaign metrics.
+
+`import_jailbreakbench.py` downloads the official 100 harmful and 100 benign
+JBB-Behaviors rows into `data/jailbreakbench/`, normalizes their schema, and
+writes a reproducibility manifest with hashes. Keep these rows held out from
+training when reporting JailbreakBench evaluation results.

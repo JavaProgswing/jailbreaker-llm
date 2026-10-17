@@ -3,7 +3,6 @@ import glob
 import json
 
 import numpy as np
-from sklearn.cluster import DBSCAN
 
 from src.targets.allowlist import check_allowlisted
 from src.utils.logging_utils import get_logger
@@ -45,7 +44,11 @@ def cluster_and_report(rows: list[dict], eps: float = 0.25, min_samples: int = 2
     if len(rows) < min_samples:
         log.info('only %d successful attacks logged so far, need more before clustering is meaningful', len(rows))
         return []
+    # sentence_transformers loads torch; it must come before sklearn. On Windows,
+    # sklearn wheels bundle an older msvcp140.dll that breaks torch's c10.dll
+    # (WinError 1114) if sklearn is imported first.
     from sentence_transformers import SentenceTransformer
+    from sklearn.cluster import DBSCAN
     model = SentenceTransformer(model_name)
     texts = [r['attacker_prompt'] for r in rows]
     X = model.encode(texts, normalize_embeddings=True)

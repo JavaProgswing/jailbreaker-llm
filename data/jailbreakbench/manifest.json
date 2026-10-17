@@ -1,0 +1,20 @@
+{
+  "dataset": "JailbreakBench/JBB-Behaviors",
+  "config": "behaviors",
+  "source": "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors",
+  "license": "MIT",
+  "retrieved_at": "2026-09-28T08:00:42.086438+00:00",
+  "counts": {
+    "harmful": 100,
+    "benign": 100
+  },
+  "smoke_count": 2,
+  "sha256": {
+    "harmful.jsonl": "7054afd75239e6a52a134dad6ab845e7730f7ca3bad27cadd4d480148e3bd031",
+    "harmful_smoke.jsonl": "015c1515d2e517dc243fdc788d1f67e46cdcf653a960643720155d32f0ffd15b",
+    "harmful_seeds.txt": "efe2a92bf9776eaade253b5b7df956b854ab719d52910d57f4b910b0276c536f",
+    "benign.jsonl": "71e943e3cd949b78fa4daf985784620617d4cc4acec2ccd77d0a5d452b81ec2b",
+    "benign_smoke.jsonl": "c60b72bd4d978edc52780edc7798d912940035e58fefdb1e398be25ced0153f0",
+    "benign_seeds.txt": "2abff9faf3475e9e2df158ed9a1a849645f9fa2ef65c241a541619c4347472ef"
+  }
+}

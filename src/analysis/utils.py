@@ -21,10 +21,29 @@ def load_transcript_rows(transcripts_dir: str = 'data/transcripts') -> pd.DataFr
     for prefix, col in [('judge', 'judge_scores'), ('eval', 'eval_ensemble')]:
         for state in COMPLIANCE_STATES:
             df[f'{prefix}_{state}'] = df[col].apply(lambda d: d.get(state, np.nan) if isinstance(d, dict) else np.nan)
-    if 'conversation_id' not in df.columns:
-        df['conversation_id'] = df['campaign_id'].astype(str) + '::' + df['seed_prompt'].astype(str)
-    if 'timestep_in_conversation' not in df.columns:
-        df['timestep_in_conversation'] = df.groupby('conversation_id').cumcount()
+    # Transcript files can be mixed (synthetic rows carry these columns, real
+    # campaign rows don't), so fill per row instead of only when the whole
+    # column is missing -- otherwise the real rows end up as NaN features.
+    fallback_ids = df['campaign_id'].astype(str) + '::' + df['seed_prompt'].astype(str)
+    if 'conversation_id' in df.columns:
+        df['conversation_id'] = df['conversation_id'].fillna(fallback_ids)
+    else:
+        df['conversation_id'] = fallback_ids
+    turn_order = df.groupby('conversation_id').cumcount()
+    if 'timestep_in_conversation' in df.columns:
+        df['timestep_in_conversation'] = df['timestep_in_conversation'].fillna(turn_order).astype(int)
+    else:
+        df['timestep_in_conversation'] = turn_order
+    return df
+
+
+def with_ground_truth(df: pd.DataFrame) -> pd.DataFrame:
+    if 'true_compliance_state' in df.columns:
+        df = df.dropna(subset=['true_compliance_state'])
+    else:
+        df = df.iloc[0:0]
+    if df.empty:
+        raise ValueError('no rows carry true_compliance_state -- this analysis needs the synthetic campaign (`python data/generate_synthetic_campaign.py`)')
     return df
 
 

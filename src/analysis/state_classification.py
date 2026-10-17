@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, f1_score
 from sklearn.svm import SVC
 
-from src.analysis.utils import COMPLIANCE_STATES, OUTPUTS_DIR, conversation_train_test_split, ensure_outputs_dir, load_transcript_rows, save_metrics
+from src.analysis.utils import COMPLIANCE_STATES, OUTPUTS_DIR, conversation_train_test_split, ensure_outputs_dir, load_transcript_rows, save_metrics, with_ground_truth
 
 METADATA_FEATURES = ['timestep_in_conversation']
 
@@ -36,7 +36,7 @@ def evaluate(name, model, X_train, y_train, X_test, y_test, save_confusion=False
 
 
 def main():
-    df = load_transcript_rows()
+    df = with_ground_truth(load_transcript_rows())
     train_df, test_df = conversation_train_test_split(df)
     X_train_raw, X_test_raw = (build_features(train_df), build_features(test_df))
     X_train, X_test = X_train_raw.align(X_test_raw, join='outer', axis=1, fill_value=0)

@@ -22,8 +22,9 @@ This repo is for authorized safety evaluation only -- running it against a
 model you own, control, or have explicit permission to test (your own
 fine-tunes, local open-weight models, or a target you've been given
 permission/API access to red-team). It is not configured with any working
-exploits out of the box; `data/` includes only a placeholder-based integration
-dataset builder and high-level local smoke seeds. Do not point the attacker loop at third-party production systems
+exploits out of the box; `data/` includes placeholder-based integration data,
+high-level local smoke seeds, and a reproducible importer for the official
+JailbreakBench behavior benchmark. Do not point the attacker loop at third-party production systems
 without authorization -- that's the same rule as any other pentesting tool.
 
 Enforcement, not just policy: `configs/allowlist.yaml` lists the only API
@@ -180,6 +181,56 @@ for a small model it may be slower than BF16.
 | `src/mutation/` | Generates variants of a successful attack via the technique library; clusters transcripts by embedding similarity (not TF-IDF) to find transferable patterns, dropping revoked targets |
 | `src/eval/` | Runs a campaign (`run_campaign.py`, resumable), redacts transcripts (`redact.py`), produces a generic scored report (`report.py`) |
 | `scripts/relabel_for_judge.py` | Converts a binary refusal/compliance benchmark into the judge's 3-class scheme |
+| `src/analysis/` | ML coursework analysis of campaign transcripts (see below), run by `main_analysis.py` |
+
+## ML coursework analysis (21CSC305P PBL)
+
+`python main_analysis.py` generates the synthetic campaign
+(`data/generate_synthetic_campaign.py`: 978 turns, 220 conversations, with a
+known hidden compliance state per turn). It then runs every step below and
+writes plots and `metrics.json` to `outputs/analysis/`.
+
+| Review | Module | Models |
+|---|---|---|
+| 1 | `eda.py`, `severity_regression.py`, `state_classification.py` | EDA, linear regression, logistic regression / SVM classification (with Random Forest baselines) |
+| **2** | **`unsupervised.py`** | **PCA, K-means, Gaussian mixture (EM), hierarchical clustering, all written from scratch in NumPy** |
+| 3 | `strategy_clustering.py`, `compliance_hmm.py`, `comparison.py` | DBSCAN baseline, HMM, comparative analysis |
+
+### Review 2: unsupervised models (`src/analysis/unsupervised.py`)
+
+The question for Review 2: can the hidden state (refusal, partial,
+full_violation) be recovered from the three live-judge probabilities alone,
+with no labels? Each model is written from its equations, with no
+scikit-learn or SciPy.
+
+- **PCA.** Build the covariance S = (1/N) Σ (xₙ − x̄)(xₙ − x̄)ᵀ, solve
+  S uᵢ = λᵢuᵢ, and project with z = Uᵀ(x − x̄). The three probabilities sum
+  to 1, so the third eigenvalue is about 0. The clustering models therefore
+  run in the 2-D principal subspace.
+- **K-means.** Minimizes J = Σₙ ‖xₙ − μ_k(n)‖². The E-step assigns each
+  point to its nearest centre and the M-step moves each centre to the mean
+  of its points. Uses k-means++ seeding and keeps the best of 10 restarts;
+  k is chosen with the elbow and the silhouette.
+- **Gaussian mixture via EM.** Models p(x) = Σ π_k N(x | μ_k, Σ_k). The
+  E-step computes responsibilities γ_nk ∝ π_k N(xₙ | μ_k, Σ_k). The M-step
+  re-estimates N_k, μ_k, Σ_k and π_k. The log-likelihood never decreases,
+  and BIC is reported for each K.
+- **Hierarchical (agglomerative) clustering.** Clusters whole conversations
+  (6 aggregate features each). It starts from single points and repeatedly
+  merges the closest pair, updating distances with the Lance–Williams rule
+  for single, complete, average or Ward linkage.
+- **Evaluation.** Silhouette (b − a)/max(a, b), Adjusted Rand Index against
+  the true state, and accuracy after matching cluster labels to states.
+
+| Model | ARI vs true state | Accuracy after matching | Silhouette |
+|---|---|---|---|
+| K-means (k = 3) | 0.924 | 0.969 | 0.684 |
+| GMM-EM (K = 3) | 0.865 | 0.951 | 0.652 |
+| Hierarchical, complete linkage (conversations) | 0.692 | 0.805 | 0.423 |
+
+The NumPy K-means reaches the same ARI (0.924) as the scikit-learn K-means
+in `strategy_clustering.py`. `tests/test_unsupervised.py` checks every model
+on toy data.
 
 ## build order
 
@@ -204,6 +255,15 @@ On Windows, the complete local integration path is:
 ```powershell
 .\scripts\run_smoke_test.ps1
 ```
+
+Import and locally validate JailbreakBench with:
+
+```powershell
+python data\import_jailbreakbench.py
+.\scripts\run_jailbreakbench.ps1 -Split harmful -Limit 2
+```
+
+JailbreakBench is kept as evaluation data, not PPO or judge-training data.
 
 See [`docs/FULL_WORKINGS.md`](docs/FULL_WORKINGS.md) for component-level
 behavior, individual commands, verified measurements, every material change,

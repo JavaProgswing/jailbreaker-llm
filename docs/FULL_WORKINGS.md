@@ -201,7 +201,7 @@ The campaign:
 
 The verified smoke campaign ran one seed for two turns. Its report contained:
 
-- 2 recorded attempts.
+- 1 recorded conversation attempt and 2 recorded turns.
 - 0% full-violation rate.
 - 0% partial-compliance rate.
 - 100% refusal final-label rate.
@@ -210,7 +210,39 @@ The verified smoke campaign ran one seed for two turns. Its report contained:
   configured. The evaluation classifier is still separate from the reward
   classifier.
 
-## 9. One-command Windows validation
+## 9. JailbreakBench integration
+
+The official `JailbreakBench/JBB-Behaviors` dataset is imported through the
+Hugging Face Dataset Viewer API:
+
+```powershell
+python data/import_jailbreakbench.py --smoke_count 2
+```
+
+This downloads the 100 harmful and 100 benign behaviors, preserves their
+index, behavior identifier, category, and source, and writes a manifest with
+retrieval time and SHA-256 hashes under `data/jailbreakbench/`.
+
+JailbreakBench is treated as a held-out evaluation set. Its rows are not used
+by the PPO or judge-training pipelines. Campaign transcripts retain benchmark
+metadata but deliberately omit the dataset's reference `target` string.
+
+Run a small local benchmark check with:
+
+```powershell
+.\scripts\run_jailbreakbench.ps1 -Split harmful -Limit 2
+```
+
+For all 100 behaviors, use `data/jailbreakbench/harmful.jsonl` directly with
+`src.eval.run_campaign`. Reports count conversations rather than turns and add
+per-category refusal, partial-compliance, and full-violation rates.
+
+The integration was verified on one official harmful behavior: one campaign
+attempt, two turns, metadata preserved, reference target omitted, and a
+category summary written successfully. This validates integration only; the
+synthetic local judges are not suitable for publishing benchmark scores.
+
+## 10. One-command Windows validation
 
 From the repository root:
 
@@ -227,7 +259,7 @@ If both judge checkpoints already exist:
 The script builds demo data, trains both judges unless skipped, runs PPO, then
 runs the campaign and report generator.
 
-## 10. Performance changes made
+## 11. Performance changes made
 
 ### Model quality and memory
 
@@ -276,12 +308,16 @@ allocated VRAM increased from 1.28 GB to 1.90 GB.
 - Added deterministic judge training seeds and configurable batch size,
   sequence length, and learning rate.
 - Added Windows smoke automation.
+- Added official JailbreakBench harmful/benign import, native JSONL campaign
+  loading, benchmark provenance, seed redaction, and category reporting.
+- Corrected reports to count seed-level conversations rather than counting
+  every turn as a separate attempt.
 
-## 11. Verification record
+## 12. Verification record
 
-Verified locally on 2026-09-25:
+Verified locally through 2026-09-28:
 
-- 45 automated tests passed.
+- 48 automated tests passed.
 - Reward judge trained and saved successfully.
 - Independent evaluation judge trained and saved successfully.
 - Qwen attacker generated two rollouts.
@@ -292,8 +328,11 @@ Verified locally on 2026-09-25:
 - Saved adapter reloaded by the campaign runner.
 - Two-turn multi-branch campaign completed.
 - Redacted JSONL transcript and JSON report were written.
+- 100 harmful and 100 benign JailbreakBench rows were downloaded and hashed.
+- One official harmful behavior completed the local two-turn campaign path.
+- Benchmark metadata and category-level reporting were validated.
 
-## 12. What must change for a meaningful evaluation
+## 13. What must change for a meaningful evaluation
 
 The included smoke artifacts validate software plumbing only. Before using
 campaign metrics for decisions:
@@ -312,6 +351,8 @@ campaign metrics for decisions:
    monitoring reward curves, KL, diversity, latency, and held-out success.
 7. Review transcript redaction before exporting data; pattern-based redaction
    is not a guarantee against every form of sensitive information.
+8. Keep JailbreakBench held out from attacker and judge training if reporting
+   JailbreakBench results.
 
 Do not interpret the synthetic judges' 100% validation accuracy or the smoke
 campaign's refusal rate as evidence about a production model's safety.

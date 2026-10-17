@@ -18,8 +18,7 @@ def redact(text: str) -> str:
 
 def redact_turn(turn: dict) -> dict:
     redacted = dict(turn)
-    if 'attacker_prompt' in redacted:
-        redacted['attacker_prompt'] = redact(redacted['attacker_prompt'])
-    if 'target_response' in redacted:
-        redacted['target_response'] = redact(redacted['target_response'])
+    for field in ('seed_prompt', 'attacker_prompt', 'target_response'):
+        if field in redacted:
+            redacted[field] = redact(redacted[field])
     return redacted

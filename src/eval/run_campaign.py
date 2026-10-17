@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -19,9 +20,41 @@ from src.utils.logging_utils import get_logger
 log = get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class SeedCase:
+    prompt: str
+    benchmark: dict | None = None
+
+
+def load_seed_cases(path: str) -> list[SeedCase]:
+    if path.lower().endswith('.jsonl'):
+        cases = []
+        with open(path, encoding='utf-8') as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                prompt = row.get('goal') or row.get('seed_prompt') or row.get('prompt')
+                if not prompt:
+                    raise ValueError(f'{path}:{line_number} has no goal, seed_prompt, or prompt field')
+                benchmark = {
+                    key: row[key]
+                    for key in ('dataset', 'config', 'split', 'index', 'behavior', 'category', 'source')
+                    if key in row
+                }
+                cases.append(SeedCase(prompt=prompt, benchmark=benchmark or None))
+        if not cases:
+            raise ValueError(f'no seed cases found in {path}')
+        return cases
+    with open(path, encoding='utf-8') as handle:
+        cases = [SeedCase(line.strip()) for line in handle if line.strip() and not line.strip().startswith('#')]
+    if not cases:
+        raise ValueError(f'no seed prompts found in {path}')
+    return cases
+
+
 def load_seed_prompts(path: str) -> list[str]:
-    with open(path) as f:
-        return [line.strip() for line in f if line.strip() and (not line.strip().startswith('#'))]
+    return [case.prompt for case in load_seed_cases(path)]
 
 
 def already_run_seeds(transcript_path: str) -> set[str]:
@@ -53,17 +86,18 @@ def main(cfg_path: str, seeds_path: str, campaign_id: str | None, resume: bool):
     target = build_target(cfg)
     agent_cfg = cfg.get('agent', {})
     agent = MultiTurnAgent(generator, live_judge, target, max_turns=agent_cfg.get('max_turns', 6), branch_candidates=agent_cfg.get('branch_candidates', 3))
-    seeds = load_seed_prompts(seeds_path)
+    seed_cases = load_seed_cases(seeds_path)
     ledger = target_ledger_entry(cfg)
     os.makedirs('data/transcripts', exist_ok=True)
     out_path = f'data/transcripts/{campaign_id}.jsonl'
     already_run = already_run_seeds(out_path) if resume else set()
     if already_run:
-        log.info('resuming %s: %d/%d seeds already logged, skipping them', campaign_id, len(already_run), len(seeds))
+        log.info('resuming %s: %d/%d seeds already logged, skipping them', campaign_id, len(already_run), len(seed_cases))
     mode = 'a' if resume and already_run else 'w'
     review_flagged = 0
     with open(out_path, mode) as f:
-        for seed in seeds:
+        for seed_case in seed_cases:
+            seed = seed_case.prompt
             if seed in already_run:
                 continue
             result = agent.run(seed)
@@ -71,12 +105,15 @@ def main(cfg_path: str, seeds_path: str, campaign_id: str | None, resume: bool):
             if ensemble.get('needs_human_review'):
                 review_flagged += 1
             for turn in result.turns:
-                row = redact_turn({'campaign_id': campaign_id, 'timestamp': datetime.now(timezone.utc).isoformat(), 'seed_prompt': seed, 'attacker_prompt': turn.attacker_prompt, 'target_response': turn.target_response, 'technique': turn.technique, 'judge_scores': turn.judge_scores, 'judge_label': result.final_label, 'eval_ensemble': ensemble['ensemble'], 'eval_needs_human_review': ensemble.get('needs_human_review', False), 'eval_single_judge_fallback': ensemble.get('single_judge_fallback', False), 'target_model': cfg['target'].get('local_model_name', 'unknown'), **ledger})
+                raw_row = {'campaign_id': campaign_id, 'timestamp': datetime.now(timezone.utc).isoformat(), 'seed_prompt': seed, 'attacker_prompt': turn.attacker_prompt, 'target_response': turn.target_response, 'technique': turn.technique, 'judge_scores': turn.judge_scores, 'judge_label': result.final_label, 'eval_ensemble': ensemble['ensemble'], 'eval_needs_human_review': ensemble.get('needs_human_review', False), 'eval_single_judge_fallback': ensemble.get('single_judge_fallback', False), 'target_model': cfg['target'].get('local_model_name', 'unknown'), **ledger}
+                if seed_case.benchmark:
+                    raw_row['benchmark'] = seed_case.benchmark
+                row = redact_turn(raw_row)
                 f.write(json.dumps(row) + '\n')
             f.flush()
-    log.info('campaign %s complete, %d seed prompts run', campaign_id, len(seeds) - len(already_run))
+    log.info('campaign %s complete, %d seed prompts run', campaign_id, len(seed_cases) - len(already_run))
     if review_flagged:
-        log.warning('%d/%d conversations had classifier/LLM-judge disagreement above threshold -- flagged eval_needs_human_review=true in the transcript, review before treating as confirmed', review_flagged, len(seeds))
+        log.warning('%d/%d conversations had classifier/LLM-judge disagreement above threshold -- flagged eval_needs_human_review=true in the transcript, review before treating as confirmed', review_flagged, len(seed_cases))
     build_report(out_path, campaign_id)
 
 
